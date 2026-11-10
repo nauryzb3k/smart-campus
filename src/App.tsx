@@ -11,7 +11,11 @@ import {
 } from "lucide-react";
 import { rooms } from "./data";
 import type { CheckResult, Room } from "./types";
-import { checkAvailability, minutesToTime, timeToMinutes } from "./utils/booking";
+import { minutesToTime, timeToMinutes } from "./utils/booking";
+import {
+  checkAvailability,
+  validateTimeInterval,
+} from "./utils/availability";
 import TimeBar from "./components/TimeBar";
 
 function defaultNow(): string {
@@ -41,21 +45,11 @@ export default function App() {
 
   const duration = !Number.isNaN(startMin) && !Number.isNaN(endMin) ? endMin - startMin : 0;
 
-  const liveErrors: string[] = [];
-  if (Number.isNaN(startMin) || Number.isNaN(endMin)) {
-    liveErrors.push("Enter valid start and end times.");
-  } else {
-    if (!(startMin >= 0 && startMin < endMin && endMin <= 1440)) {
-      liveErrors.push("Start time must be earlier than end time, and both must be between 00:00 and 23:59.");
-    }
-    if (!Number.isNaN(nowMin) && startMin <= nowMin) {
-      liveErrors.push("Start must be after the current time.");
-    }
-    if (duration > 120) {
-      liveErrors.push("Duration exceeds 120 minutes.");
-    }
-  }
-
+  const validationError = validateTimeInterval(
+    startMin,
+    endMin,
+    nowMin
+  );
   function handleCheck() {
     setResult(
       checkAvailability(selectedRoom ?? null, startMin, endMin, nowMin)
@@ -177,18 +171,10 @@ export default function App() {
               </label>
             </div>
 
-            {/* Live validation feedback */}
-            {liveErrors.length > 0 && (
-              <ul className="mt-3 space-y-1">
-                {liveErrors.map((err, i) => (
-                  <li
-                    key={i}
-                    className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5"
-                  >
-                    {err}
-                  </li>
-                ))}
-              </ul>
+            {validationError && (
+              <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                {validationError}
+              </p>
             )}
 
             {duration > 0 && !Number.isNaN(duration) && (
