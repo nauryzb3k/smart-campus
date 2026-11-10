@@ -6,6 +6,7 @@ export const rooms: Room[] = [
     name: "Newton 101",
     building: "Science Block",
     capacity: 40,
+    equipment: ["Projector", "Whiteboard", "Computers"],
     blocked: false,
     bookings: [
       { start: 9 * 60, end: 10 * 60, label: "Physics Lecture" },
@@ -17,6 +18,7 @@ export const rooms: Room[] = [
     name: "Tesla Lab 2B",
     building: "Engineering Wing",
     capacity: 25,
+    equipment: 	["Computers", "Projector", "3D Printer"],
     blocked: true,
     blockedReason: "Under maintenance until Oct 10",
     bookings: [],
@@ -25,6 +27,7 @@ export const rooms: Room[] = [
     id: "curie-conf",
     name: "Curie Conference Room",
     building: "Research Center",
+    equipment: 	["Projector", "Whiteboard", "Video Conferencing"],
     capacity: 12,
     blocked: false,
     bookings: [
@@ -37,6 +40,7 @@ export const rooms: Room[] = [
     name: "Da Vinci Studio",
     building: "Arts Pavilion",
     capacity: 20,
+    equipment: 	["Computers", "Drawing Tablets", "Whiteboard"],
     blocked: false,
     bookings: [
       { start: 10 * 60, end: 11 * 60 + 30, label: "Design Workshop" },
@@ -48,6 +52,7 @@ export const rooms: Room[] = [
     building: "Main Building",
     capacity: 200,
     blocked: false,
+    equipment: 		["Projector", "Microphone", "Speakers"],
     bookings: [
       { start: 9 * 60, end: 9 * 60 + 45, label: "Morning Assembly" },
       { start: 15 * 60, end: 17 * 60, label: "Guest Lecture" },
