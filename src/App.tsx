@@ -10,6 +10,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { rooms } from "./data";
+import { filterRooms } from "./utils/filters";
 import type { CheckResult, Room } from "./types";
 import { minutesToTime, timeToMinutes } from "./utils/booking";
 import {
@@ -22,15 +23,37 @@ function defaultNow(): string {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
-
+  const allEquipment = Array.from(
+    new Set(rooms.flatMap((room) => room.equipment))
+  );
 export default function App() {
   const [selectedId, setSelectedId] = useState<string>(rooms[0].id);
   const [startTime, setStartTime] = useState("10:30");
   const [endTime, setEndTime] = useState("11:30");
   const [nowTime, setNowTime] = useState(defaultNow());
   const [result, setResult] = useState<CheckResult | null>(null);
+  const [minCapacity, setMinCapacity] = useState(0);
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
 
-  const selectedRoom: Room | undefined = rooms.find((r) => r.id === selectedId);
+  const filteredRooms = useMemo(
+  () => filterRooms(rooms, {
+    minCapacity,
+    equipment: selectedEquipment,
+  }),
+  [minCapacity, selectedEquipment]
+);
+
+const selectedRoom: Room | undefined =
+  filteredRooms.find((room) => room.id === selectedId) ?? filteredRooms[0];
+  function handleEquipmentChange(item: string, checked: boolean) {
+  setSelectedEquipment((current) =>
+    checked
+      ? [...current, item]
+      : current.filter((equipment) => equipment !== item)
+  );
+
+  setResult(null);
+}
   const startMin = timeToMinutes(startTime);
   const endMin = timeToMinutes(endTime);
   const nowMin = timeToMinutes(nowTime);
@@ -83,7 +106,26 @@ export default function App() {
               <Building2 size={16} className="text-blue-600" />
               Select a Room
             </h2>
+            <div className="mb-5">
+  <label
+    htmlFor="minCapacity"
+    className="block text-sm font-medium text-slate-700 mb-2"
+  >
+    Minimum room capacity
+  </label>
 
+  <input
+    id="minCapacity"
+    type="number"
+    min="0"
+    value={minCapacity}
+    onChange={(e) => {
+      setMinCapacity(Math.max(0, Number(e.target.value) || 0));
+      setResult(null);
+    }}
+    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+  />
+</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {rooms.map((room) => {
                 const active = room.id === selectedId;
