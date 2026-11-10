@@ -1,14 +1,5 @@
-import { useMemo, useState } from "react";
-import {
-  Building2,
-  CalendarCheck,
-  CheckCircle2,
-  Clock,
-  Lock,
-  Search,
-  Users,
-  XCircle,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Building2, CalendarCheck, CircleCheck as CheckCircle2, Clock, Lock, Search, Users, Circle as XCircle } from "lucide-react";
 import { rooms } from "./data";
 import { filterRooms } from "./utils/filters";
 import type { CheckResult, Room } from "./types";
@@ -45,6 +36,12 @@ export default function App() {
 
 const selectedRoom: Room | undefined =
   filteredRooms.find((room) => room.id === selectedId) ?? filteredRooms[0];
+
+useEffect(() => {
+  if (selectedRoom && selectedRoom.id !== selectedId) {
+    setSelectedId(selectedRoom.id);
+  }
+}, [selectedRoom, selectedId]);
   function handleEquipmentChange(item: string, checked: boolean) {
   setSelectedEquipment((current) =>
     checked
@@ -126,9 +123,42 @@ const selectedRoom: Room | undefined =
     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
   />
 </div>
+            <div className="mb-5">
+  <span className="block text-sm font-medium text-slate-700 mb-2">
+    Equipment
+  </span>
+  <div className="flex flex-wrap gap-2">
+    {allEquipment.map((item) => {
+      const checked = selectedEquipment.includes(item);
+      return (
+        <label
+          key={item}
+          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm cursor-pointer transition-colors ${
+            checked
+              ? "border-blue-600 bg-blue-50 text-blue-700"
+              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => handleEquipmentChange(item, e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+          />
+          {item}
+        </label>
+      );
+    })}
+  </div>
+</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {rooms.map((room) => {
-                const active = room.id === selectedId;
+              {filteredRooms.length === 0 ? (
+                <p className="col-span-full text-sm text-slate-500 text-center py-6">
+                  No rooms match the selected filters
+                </p>
+              ) : null}
+              {filteredRooms.map((room) => {
+                const active = selectedRoom?.id === room.id;
                 return (
                   <button
                     key={room.id}
