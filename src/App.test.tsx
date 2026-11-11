@@ -43,4 +43,11 @@ describe("Smart Campus integration", () => {
       screen.queryByText(rooms[0].bookings[0].label)
     ).toBeNull();
   });
+
+  it("disables selection of blocked rooms", () => {
+    render(<App />);
+
+    const blockedButton = screen.getByRole("button", { name: /Tesla Lab 2B/ });
+    expect(blockedButton.hasAttribute("disabled")).toBe(true);
+  });
 });

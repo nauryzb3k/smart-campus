@@ -162,14 +162,17 @@ useEffect(() => {
                 return (
                   <button
                     key={room.id}
+                    disabled={room.blocked}
                     onClick={() => {
                       setSelectedId(room.id);
                       setResult(null);
                     }}
                     className={`text-left p-3 rounded-xl border transition-all ${
-                      active
-                        ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      room.blocked
+                        ? "border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed"
+                        : active
+                          ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">

@@ -90,4 +90,17 @@ describe("checkAvailability", () => {
     expect(checkAvailability(roomB, 600, 660, 540).status)
       .toBe("available");
   });
+
+  it("rejects a NaN nowMinutes (cleared current-time field)", () => {
+    expect(checkAvailability(roomB, 600, 660, NaN).status)
+      .toBe("unavailable");
+  });
+
+  it("returns a clear reason when nowMinutes is NaN", () => {
+    const result = checkAvailability(roomB, 600, 660, NaN);
+    expect(result.status).toBe("unavailable");
+    if (result.status === "unavailable") {
+      expect(result.reason).toMatch(/current time/i);
+    }
+  });
 });

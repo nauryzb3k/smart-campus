@@ -13,6 +13,10 @@ export function validateTimeInterval(
     return "Please enter valid start and end times.";
   }
 
+  if (!Number.isFinite(nowMinutes)) {
+    return "Current time is not set. Please enter a valid current time.";
+  }
+
   if (!(start >= 0 && start < end && end <= 1440)) {
     return "Start time must be earlier than end time, and both must be between 00:00 and 24:00.";
   }
