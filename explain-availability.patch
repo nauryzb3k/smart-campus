@@ -1,0 +1,580 @@
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -19,3 +19,25 @@
+   | { status: "available" }
+   | { status: "unavailable"; reason: string };
+ 
++export type ReasonCode =
++  | "room_not_selected"
++  | "invalid_interval"
++  | "time_not_set"
++  | "start_in_past"
++  | "duration_exceeded"
++  | "room_blocked"
++  | "booking_overlap"
++  | "available";
++
++export type ExplanationInput = {
++  roomLabel: string;
++  startMinutes: number;
++  endMinutes: number;
++  isAvailable: boolean;
++  reasonCode: ReasonCode;
++};
++
++export type ExplanationOutput = {
++  text: string;
++  usedFallback: boolean;
++};
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,5 +1,5 @@
+ import { useEffect, useMemo, useState } from "react";
+-import { Building2, CalendarCheck, CircleCheck as CheckCircle2, Clock, Lock, Search, Users, Circle as XCircle } from "lucide-react";
++import { Building2, CalendarCheck, CircleCheck as CheckCircle2, Clock, Lock, Search, Sparkles, Users, Circle as XCircle } from "lucide-react";
+ import { rooms } from "./data";
+ import { filterRooms } from "./utils/filters";
+ import type { CheckResult, Room } from "./types";
+@@ -8,6 +8,10 @@
+   checkAvailability,
+   validateTimeInterval,
+ } from "./utils/availability";
++import {
++  buildExplanationInput,
++  generateExplanation,
++} from "./utils/explain";
+ import TimeBar from "./components/TimeBar";
+ 
+ function defaultNow(): string {
+@@ -23,6 +27,10 @@
+   const [endTime, setEndTime] = useState("11:30");
+   const [nowTime, setNowTime] = useState(defaultNow());
+   const [result, setResult] = useState<CheckResult | null>(null);
++  const [explanation, setExplanation] = useState<
++    | { text: string; usedFallback: boolean; forStatus: "available" | "unavailable" }
++    | null
++  >(null);
+   const [minCapacity, setMinCapacity] = useState(0);
+   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
+ 
+@@ -50,6 +58,7 @@
+   );
+ 
+   setResult(null);
++  setExplanation(null);
+ }
+   const startMin = timeToMinutes(startTime);
+   const endMin = timeToMinutes(endTime);
+@@ -74,6 +83,25 @@
+     setResult(
+       checkAvailability(selectedRoom ?? null, startMin, endMin, nowMin)
+     );
++    setExplanation(null);
++  }
++
++  function handleExplain() {
++    if (!result) {
++      return;
++    }
++    const input = buildExplanationInput(
++      selectedRoom ?? null,
++      result,
++      startMin,
++      endMin
++    );
++    const output = generateExplanation(input);
++    setExplanation({
++      text: output.text,
++      usedFallback: output.usedFallback,
++      forStatus: result.status,
++    });
+   }
+ 
+   return (
+@@ -119,6 +147,7 @@
+     onChange={(e) => {
+       setMinCapacity(Math.max(0, Number(e.target.value) || 0));
+       setResult(null);
++      setExplanation(null);
+     }}
+     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+   />
+@@ -166,6 +195,7 @@
+                     onClick={() => {
+                       setSelectedId(room.id);
+                       setResult(null);
++                      setExplanation(null);
+                     }}
+                     className={`text-left p-3 rounded-xl border transition-all ${
+                       room.blocked
+@@ -216,6 +246,7 @@
+                   onChange={(e) => {
+                     setNowTime(e.target.value);
+                     setResult(null);
++                    setExplanation(null);
+                   }}
+                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                 />
+@@ -228,6 +259,7 @@
+                   onChange={(e) => {
+                     setStartTime(e.target.value);
+                     setResult(null);
++                    setExplanation(null);
+                   }}
+                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                 />
+@@ -240,6 +272,7 @@
+                   onChange={(e) => {
+                     setEndTime(e.target.value);
+                     setResult(null);
++                    setExplanation(null);
+                   }}
+                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                 />
+@@ -268,6 +301,16 @@
+               <Search size={16} />
+               Check Availability
+             </button>
++
++            {result && (
++              <button
++                onClick={handleExplain}
++                className="mt-2.5 w-full flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium px-4 py-2.5 hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100 transition-colors"
++              >
++                <Sparkles size={16} className="text-blue-600" />
++                Explain availability
++              </button>
++            )}
+           </section>
+ 
+           {/* Right: Result + Timeline */}
+@@ -326,6 +369,31 @@
+               </div>
+             )}
+ 
++            {/* AI-generated explanation — clearly separate from the confirmed status */}
++            {explanation && (
++              <div
++                aria-live="polite"
++                className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4"
++              >
++                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1.5">
++                  <Sparkles size={12} />
++                  AI-generated explanation
++                  {explanation.usedFallback && (
++                    <span className="ml-auto normal-case tracking-normal font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
++                      Fallback used
++                    </span>
++                  )}
++                </p>
++                <p className="text-sm text-slate-700 leading-relaxed">
++                  {explanation.text}
++                </p>
++                <p className="mt-2 text-[11px] text-slate-500">
++                  This text is generated for readability only. It does not decide or
++                  modify availability — the confirmed status above is authoritative.
++                </p>
++              </div>
++            )}
++
+             {/* Timeline */}
+             <h3 className="text-xs font-semibold text-slate-700 mt-6 mb-1">
+               24-hour schedule
+--- /dev/null
++++ b/src/utils/explain.ts
+@@ -0,0 +1,179 @@
++import type {
++  CheckResult,
++  ExplanationInput,
++  ExplanationOutput,
++  ReasonCode,
++  Room,
++} from "../types";
++import { minutesToTime } from "./booking";
++
++export function buildExplanationInput(
++  room: Room | null,
++  result: CheckResult,
++  start: number,
++  end: number
++): ExplanationInput {
++  return {
++    roomLabel: room?.name ?? "Unknown room",
++    startMinutes: start,
++    endMinutes: end,
++    isAvailable: result.status === "available",
++    reasonCode: classifyResult(room, result),
++  };
++}
++
++function classifyResult(room: Room | null, result: CheckResult): ReasonCode {
++  if (result.status === "available") {
++    return "available";
++  }
++  if (!room) {
++    return "room_not_selected";
++  }
++  const reason = result.reason;
++  if (/blocked/i.test(reason)) {
++    return "room_blocked";
++  }
++  if (/overlap/i.test(reason)) {
++    return "booking_overlap";
++  }
++  if (/duration/i.test(reason)) {
++    return "duration_exceeded";
++  }
++  if (/current time/i.test(reason)) {
++    return "time_not_set";
++  }
++  if (/after the current time/i.test(reason)) {
++    return "start_in_past";
++  }
++  return "invalid_interval";
++}
++
++export function validateExplanationInput(
++  input: unknown
++): string | null {
++  if (typeof input !== "object" || input === null) {
++    return "Explanation input must be an object.";
++  }
++
++  const candidate = input as Partial<ExplanationInput>;
++
++  if (typeof candidate.roomLabel !== "string" || candidate.roomLabel.trim() === "") {
++    return "Room label is missing.";
++  }
++  if (!Number.isFinite(candidate.startMinutes) || !Number.isFinite(candidate.endMinutes)) {
++    return "Start and end times must be valid numbers.";
++  }
++  if (
++    candidate.startMinutes! < 0 ||
++    candidate.endMinutes! > 1440 ||
++    candidate.startMinutes! >= candidate.endMinutes!
++  ) {
++    return "Start must be before end, within the 00:00-24:00 range.";
++  }
++  if (typeof candidate.isAvailable !== "boolean") {
++    return "Availability flag must be a boolean.";
++  }
++  const validCodes: ReasonCode[] = [
++    "room_not_selected",
++    "invalid_interval",
++    "time_not_set",
++    "start_in_past",
++    "duration_exceeded",
++    "room_blocked",
++    "booking_overlap",
++    "available",
++  ];
++  if (!validCodes.includes(candidate.reasonCode as ReasonCode)) {
++    return "Unknown reason code.";
++  }
++
++  return null;
++}
++
++export function generateExplanation(
++  input: ExplanationInput
++): ExplanationOutput {
++  const inputError = validateExplanationInput(input);
++
++  if (inputError) {
++    return { text: fallbackExplanation(inputError), usedFallback: true };
++  }
++
++  try {
++    const raw = mockAdapter(input);
++    const outputError = validateExplanationOutput(raw, input.isAvailable);
++
++    if (outputError) {
++      return { text: fallbackExplanation(outputError), usedFallback: true };
++    }
++
++    return { text: raw, usedFallback: false };
++  } catch {
++    return {
++      text: fallbackExplanation("The explanation service is unavailable."),
++      usedFallback: true,
++    };
++  }
++}
++
++// Mock adapter standing in for a future LLM call. Deterministic, offline, no
++// secrets. It only describes the checker's verdict; it never computes one.
++function mockAdapter(input: ExplanationInput): string {
++  const slot = `${minutesToTime(input.startMinutes)}–${minutesToTime(input.endMinutes)}`;
++
++  switch (input.reasonCode) {
++    case "available":
++      return `${input.roomLabel} is free during ${slot}. No existing booking or block conflicts with this interval.`;
++    case "room_not_selected":
++      return "No room is selected, so availability cannot be confirmed. Select a room and check again.";
++    case "room_blocked":
++      return `${input.roomLabel} is currently blocked for maintenance or another restriction. No interval can be booked until the block is lifted.`;
++    case "booking_overlap":
++      return `${input.roomLabel} already has a booking overlapping ${slot}. Choose a nearby free slot on the timeline.`;
++    case "duration_exceeded":
++      return `The requested interval is longer than the 120-minute maximum. Shorten the interval to at most 120 minutes.`;
++    case "start_in_past":
++      return `The start time is not after the current time. Pick a start time later than now.`;
++    case "time_not_set":
++      return "The current time is not set, so past-time validation cannot run. Enter a valid current time.";
++    case "invalid_interval":
++    default:
++      return `The interval ${slot} is not a valid time range. Ensure the start is earlier than the end within 00:00-24:00.`;
++  }
++}
++
++export function validateExplanationOutput(
++  text: unknown,
++  isAvailable: boolean
++): string | null {
++  if (typeof text !== "string" || text.trim() === "") {
++    return "Generated explanation is empty.";
++  }
++
++  const sentences = text.trim().split(/[.!?]+\s|[.!?]+$/).filter((s) => s.trim() !== "");
++
++  if (sentences.length > 2) {
++    return "Generated explanation exceeds two sentences.";
++  }
++
++  const claimsAvailable = /\b(available|free)\b/i.test(text);
++  const claimsUnavailable = /\b(unavailable|blocked|overlap|cannot)\b/i.test(text);
++
++  if (isAvailable && claimsUnavailable) {
++    return "Generated explanation contradicts the confirmed available status.";
++  }
++  if (!isAvailable && claimsAvailable && !claimsUnavailable) {
++    return "Generated explanation contradicts the confirmed unavailable status.";
++  }
++
++  return null;
++}
++
++function fallbackExplanation(cause: string): string {
++  const decision = "The confirmed availability status above remains authoritative.";
++
++  if (/contradict/i.test(cause)) {
++    return `An explanation could not be generated safely. ${decision}`;
++  }
++  return `Explanation generation failed (${cause}). ${decision}`;
++}
+--- /dev/null
++++ b/src/utils/explain.test.ts
+@@ -0,0 +1,213 @@
++import { describe, expect, it } from "vitest";
++import {
++  buildExplanationInput,
++  generateExplanation,
++  validateExplanationInput,
++  validateExplanationOutput,
++} from "./explain";
++import type { Room } from "../types";
++
++const roomB: Room = {
++  id: "room-b",
++  name: "Room B",
++  building: "Main",
++  capacity: 10,
++  equipment: ["Computers"],
++  blocked: false,
++  bookings: [],
++};
++
++describe("buildExplanationInput", () => {
++  it("derives available status from the checker result", () => {
++    const input = buildExplanationInput(
++      roomB,
++      { status: "available" },
++      600,
++      660
++    );
++
++    expect(input.isAvailable).toBe(true);
++    expect(input.reasonCode).toBe("available");
++    expect(input.roomLabel).toBe("Room B");
++  });
++
++  it("classifies a blocked room", () => {
++    const blocked = { ...roomB, blocked: true };
++    const input = buildExplanationInput(
++      blocked,
++      { status: "unavailable", reason: "Room is blocked — maintenance." },
++      600,
++      660
++    );
++
++    expect(input.isAvailable).toBe(false);
++    expect(input.reasonCode).toBe("room_blocked");
++  });
++
++  it("classifies an overlap", () => {
++    const input = buildExplanationInput(
++      roomB,
++      { status: "unavailable", reason: "Overlaps existing booking (09:00–10:00)." },
++      600,
++      660
++    );
++
++    expect(input.reasonCode).toBe("booking_overlap");
++  });
++
++  it("uses a placeholder label when the room is null", () => {
++    const input = buildExplanationInput(
++      null,
++      { status: "unavailable", reason: "Please select a room." },
++      600,
++      660
++    );
++
++    expect(input.roomLabel).toBe("Unknown room");
++    expect(input.reasonCode).toBe("room_not_selected");
++  });
++});
++
++describe("validateExplanationInput", () => {
++  it("accepts a well-formed payload", () => {
++    const input = buildExplanationInput(
++      roomB,
++      { status: "available" },
++      600,
++      660
++    );
++
++    expect(validateExplanationInput(input)).toBeNull();
++  });
++
++  it("rejects non-finite times", () => {
++    const input = { ...buildExplanationInput(roomB, { status: "available" }, 600, 660) };
++    input.startMinutes = NaN;
++
++    expect(validateExplanationInput(input)).toMatch(/valid numbers/);
++  });
++
++  it("rejects an inverted interval", () => {
++    const input = buildExplanationInput(roomB, { status: "available" }, 660, 600);
++
++    expect(validateExplanationInput(input)).toMatch(/before end/);
++  });
++
++  it("rejects an unknown reason code", () => {
++    const input = { ...buildExplanationInput(roomB, { status: "available" }, 600, 660) };
++    (input as { reasonCode: string }).reasonCode = "mystery";
++
++    expect(validateExplanationInput(input)).toMatch(/Unknown reason/);
++  });
++
++  it("rejects a missing room label", () => {
++    const input = { ...buildExplanationInput(roomB, { status: "available" }, 600, 660) };
++    (input as { roomLabel: string }).roomLabel = "   ";
++
++    expect(validateExplanationInput(input)).toMatch(/label is missing/);
++  });
++
++  it("rejects a non-boolean availability flag", () => {
++    const input = { ...buildExplanationInput(roomB, { status: "available" }, 600, 660) };
++    (input as { isAvailable: boolean }).isAvailable = "yes" as unknown as boolean;
++
++    expect(validateExplanationInput(input)).toMatch(/boolean/);
++  });
++
++  it("rejects a non-object payload", () => {
++    expect(validateExplanationInput(null)).toMatch(/must be an object/);
++    expect(validateExplanationInput(42)).toMatch(/must be an object/);
++  });
++});
++
++describe("generateExplanation", () => {
++  it("returns a two-sentence explanation for an available slot", () => {
++    const input = buildExplanationInput(
++      roomB,
++      { status: "available" },
++      600,
++      660
++    );
++    const output = generateExplanation(input);
++
++    expect(output.usedFallback).toBe(false);
++    expect(output.text.split(/[.!?]+\s|[.!?]+$/).filter((s) => s.trim()).length)
++      .toBe(2);
++  });
++
++  it("returns a safe fallback for invalid input", () => {
++    const output = generateExplanation({
++      roomLabel: "",
++      startMinutes: NaN,
++      endMinutes: 660,
++      isAvailable: true,
++      reasonCode: "mystery" as never,
++    });
++
++    expect(output.usedFallback).toBe(true);
++    expect(output.text).toMatch(/Explanation generation failed/);
++  });
++
++  it("fallback never contradicts the confirmed status", () => {
++    const input = buildExplanationInput(
++      roomB,
++      { status: "available" },
++      600,
++      660
++    );
++    const output = generateExplanation({
++      ...input,
++      reasonCode: "mystery" as never,
++    });
++
++    expect(output.usedFallback).toBe(true);
++    expect(output.text).not.toMatch(/\bblocked\b/i);
++    expect(output.text).not.toMatch(/\boverlap\b/i);
++  });
++});
++
++describe("validateExplanationOutput", () => {
++  it("rejects more than two sentences", () => {
++    expect(
++      validateExplanationOutput(
++        "One. Two. Three.",
++        true
++      )
++    ).toMatch(/two sentences/);
++  });
++
++  it("rejects empty output", () => {
++    expect(validateExplanationOutput("", true)).toMatch(/empty/);
++    expect(validateExplanationOutput("   ", true)).toMatch(/empty/);
++  });
++
++  it("rejects contradictions of the confirmed status", () => {
++    expect(
++      validateExplanationOutput(
++        "The room is unavailable during this slot. It is blocked.",
++        true
++      )
++    ).toMatch(/contradicts/);
++    expect(
++      validateExplanationOutput(
++        "The room is free during this slot. You can book it.",
++        false
++      )
++    ).toMatch(/contradicts/);
++  });
++
++  it("accepts consistent output", () => {
++    expect(
++      validateExplanationOutput(
++        "The room is free during this slot. No conflicts exist.",
++        true
++      )
++    ).toBeNull();
++    expect(
++      validateExplanationOutput(
++        "The room is blocked during this slot. Try another time.",
++        false
++      )
++    ).toBeNull();
++  });
++});
