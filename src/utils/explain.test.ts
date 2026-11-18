@@ -46,6 +46,23 @@ describe("buildExplanationInput", () => {
     expect(input.reasonCode).toBe("room_blocked");
   });
 
+  it("blocked-room explanation states the block without inventing a cause", () => {
+    const blocked = { ...roomB, blocked: true };
+    const input = buildExplanationInput(
+      blocked,
+      { status: "unavailable", reason: "Room is blocked — maintenance." },
+      600,
+      660
+    );
+    const output = generateExplanation(input);
+
+    expect(output.usedFallback).toBe(false);
+    expect(output.text).toMatch(/\bblocked\b/i);
+    expect(output.text).not.toMatch(/maintenance/i);
+    expect(output.text).not.toMatch(/restriction/i);
+    expect(output.text).not.toMatch(/until the block is lifted/i);
+  });
+
   it("classifies an overlap", () => {
     const input = buildExplanationInput(
       roomB,
@@ -304,5 +321,23 @@ describe("validateExplanationOutput", () => {
         false
       )
     ).toBeNull();
+  });
+
+  it("rejects conflicting availability claims when unavailable", () => {
+    expect(
+      validateExplanationOutput(
+        "The room is normally free. It is blocked today.",
+        false
+      )
+    ).toMatch(/conflicting availability claims/);
+  });
+
+  it("rejects conflicting availability claims when available", () => {
+    expect(
+      validateExplanationOutput(
+        "The room is free during this slot. However, it is blocked.",
+        true
+      )
+    ).toMatch(/conflicting availability claims/);
   });
 });

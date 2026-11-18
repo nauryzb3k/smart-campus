@@ -175,7 +175,7 @@ function mockAdapter(input: ExplanationInput): string {
     case "room_not_selected":
       return "No room is selected, so availability cannot be confirmed. Select a room and check again.";
     case "room_blocked":
-      return `${input.roomLabel} is currently blocked for maintenance or another restriction. No interval can be booked until the block is lifted.`;
+      return `${input.roomLabel} is currently blocked, so this interval cannot be booked. The confirmed availability status above is authoritative.`;
     case "booking_overlap":
       return `${input.roomLabel} already has a booking overlapping ${slot}. Choose a nearby free slot on the timeline.`;
     case "duration_exceeded":
@@ -207,10 +207,16 @@ export function validateExplanationOutput(
   const claimsAvailable = /\b(available|free)\b/i.test(text);
   const claimsUnavailable = /\b(unavailable|blocked|overlap|cannot)\b/i.test(text);
 
+  // Text claiming both free and unavailable is internally inconsistent no
+  // matter which way the checker ruled.
+  if (claimsAvailable && claimsUnavailable) {
+    return "Generated explanation contains conflicting availability claims.";
+  }
+
   if (isAvailable && claimsUnavailable) {
     return "Generated explanation contradicts the confirmed available status.";
   }
-  if (!isAvailable && claimsAvailable && !claimsUnavailable) {
+  if (!isAvailable && claimsAvailable) {
     return "Generated explanation contradicts the confirmed unavailable status.";
   }
 
