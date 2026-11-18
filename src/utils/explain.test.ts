@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_ROOM_LABEL_LENGTH,
   buildExplanationInput,
+  failingAdapter,
   generateExplanation,
   validateExplanationInput,
   validateExplanationOutput,
@@ -55,6 +57,17 @@ describe("buildExplanationInput", () => {
     expect(input.reasonCode).toBe("booking_overlap");
   });
 
+  it("classifies a past start time as start_in_past, not time_not_set", () => {
+    const input = buildExplanationInput(
+      roomB,
+      { status: "unavailable", reason: "Start time must be after the current time." },
+      480,
+      540
+    );
+
+    expect(input.reasonCode).toBe("start_in_past");
+  });
+
   it("uses a placeholder label when the room is null", () => {
     const input = buildExplanationInput(
       null,
@@ -105,6 +118,27 @@ describe("validateExplanationInput", () => {
     (input as { roomLabel: string }).roomLabel = "   ";
 
     expect(validateExplanationInput(input)).toMatch(/label is missing/);
+  });
+
+  it("rejects an empty room label", () => {
+    const input = { ...buildExplanationInput(roomB, { status: "available" }, 600, 660) };
+    (input as { roomLabel: string }).roomLabel = "";
+
+    expect(validateExplanationInput(input)).toMatch(/label is missing/);
+  });
+
+  it("rejects a room label over 100 characters", () => {
+    const input = { ...buildExplanationInput(roomB, { status: "available" }, 600, 660) };
+    (input as { roomLabel: string }).roomLabel = "R".repeat(MAX_ROOM_LABEL_LENGTH + 1);
+
+    expect(validateExplanationInput(input)).toMatch(/at most 100 characters/);
+  });
+
+  it("accepts a room label of exactly 100 characters", () => {
+    const input = { ...buildExplanationInput(roomB, { status: "available" }, 600, 660) };
+    (input as { roomLabel: string }).roomLabel = "R".repeat(MAX_ROOM_LABEL_LENGTH);
+
+    expect(validateExplanationInput(input)).toBeNull();
   });
 
   it("rejects a non-boolean availability flag", () => {
@@ -163,6 +197,67 @@ describe("generateExplanation", () => {
     expect(output.usedFallback).toBe(true);
     expect(output.text).not.toMatch(/\bblocked\b/i);
     expect(output.text).not.toMatch(/\boverlap\b/i);
+  });
+
+  it("returns a safe fallback when the adapter times out", () => {
+    const input = buildExplanationInput(
+      roomB,
+      { status: "available" },
+      600,
+      660
+    );
+    const output = generateExplanation(input, failingAdapter("timeout"));
+
+    expect(output.usedFallback).toBe(true);
+    expect(output.text).toMatch(/timed out/);
+    expect(output.text).toMatch(/remains authoritative/);
+    expect(output.text).not.toMatch(/\bblocked\b/i);
+    expect(output.text).not.toMatch(/\boverlap\b/i);
+  });
+
+  it("returns a safe fallback when the adapter reports a service error", () => {
+    const input = buildExplanationInput(
+      roomB,
+      { status: "unavailable", reason: "Overlaps existing booking (09:00–10:00)." },
+      600,
+      660
+    );
+    const output = generateExplanation(input, failingAdapter("service_error"));
+
+    expect(output.usedFallback).toBe(true);
+    expect(output.text).toMatch(/service returned an error/);
+    expect(output.text).toMatch(/remains authoritative/);
+  });
+
+  it("returns a safe fallback when the API key is missing", () => {
+    const input = buildExplanationInput(
+      roomB,
+      { status: "available" },
+      600,
+      660
+    );
+    const output = generateExplanation(input, failingAdapter("missing_api_key"));
+
+    expect(output.usedFallback).toBe(true);
+    expect(output.text).toMatch(/missing API key/);
+    expect(output.text).toMatch(/remains authoritative/);
+    expect(output.text).not.toMatch(/\bblocked\b/i);
+    expect(output.text).not.toMatch(/\boverlap\b/i);
+  });
+
+  it("failure fallbacks preserve the deterministic result in the message", () => {
+    const input = buildExplanationInput(
+      roomB,
+      { status: "available" },
+      600,
+      660
+    );
+
+    for (const kind of ["timeout", "service_error", "missing_api_key"] as const) {
+      const output = generateExplanation(input, failingAdapter(kind));
+      expect(output.usedFallback).toBe(true);
+      expect(output.text).toMatch(/Explanation generation failed/);
+    }
   });
 });
 

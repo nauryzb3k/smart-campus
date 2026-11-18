@@ -7,6 +7,8 @@ import type {
 } from "../types";
 import { minutesToTime } from "./booking";
 
+export const MAX_ROOM_LABEL_LENGTH = 100;
+
 export function buildExplanationInput(
   room: Room | null,
   result: CheckResult,
@@ -39,11 +41,13 @@ function classifyResult(room: Room | null, result: CheckResult): ReasonCode {
   if (/duration/i.test(reason)) {
     return "duration_exceeded";
   }
-  if (/current time/i.test(reason)) {
-    return "time_not_set";
-  }
+  // Must run before the looser /current time/ check, or "Start time must be
+  // after the current time." is misclassified as time_not_set.
   if (/after the current time/i.test(reason)) {
     return "start_in_past";
+  }
+  if (/current time/i.test(reason)) {
+    return "time_not_set";
   }
   return "invalid_interval";
 }
@@ -59,6 +63,9 @@ export function validateExplanationInput(
 
   if (typeof candidate.roomLabel !== "string" || candidate.roomLabel.trim() === "") {
     return "Room label is missing.";
+  }
+  if (candidate.roomLabel.length > MAX_ROOM_LABEL_LENGTH) {
+    return `Room label must be at most ${MAX_ROOM_LABEL_LENGTH} characters.`;
   }
   if (!Number.isFinite(candidate.startMinutes) || !Number.isFinite(candidate.endMinutes)) {
     return "Start and end times must be valid numbers.";
@@ -90,8 +97,34 @@ export function validateExplanationInput(
   return null;
 }
 
+export type ExplanationAdapter = (input: ExplanationInput) => string;
+
+export type AdapterFailureKind =
+  | "timeout"
+  | "service_error"
+  | "missing_api_key";
+
+export class ExplanationAdapterError extends Error {
+  readonly kind: AdapterFailureKind;
+
+  constructor(kind: AdapterFailureKind) {
+    super(`Simulated adapter failure: ${kind}`);
+    this.name = "ExplanationAdapterError";
+    this.kind = kind;
+  }
+}
+
+// Builds an adapter that always fails with the given kind, so timeout,
+// service-error and missing-key behavior can be verified safely offline.
+export function failingAdapter(kind: AdapterFailureKind): ExplanationAdapter {
+  return () => {
+    throw new ExplanationAdapterError(kind);
+  };
+}
+
 export function generateExplanation(
-  input: ExplanationInput
+  input: ExplanationInput,
+  adapter: ExplanationAdapter = mockAdapter
 ): ExplanationOutput {
   const inputError = validateExplanationInput(input);
 
@@ -100,7 +133,7 @@ export function generateExplanation(
   }
 
   try {
-    const raw = mockAdapter(input);
+    const raw = adapter(input);
     const outputError = validateExplanationOutput(raw, input.isAvailable);
 
     if (outputError) {
@@ -108,16 +141,31 @@ export function generateExplanation(
     }
 
     return { text: raw, usedFallback: false };
-  } catch {
+  } catch (error) {
     return {
-      text: fallbackExplanation("The explanation service is unavailable."),
+      text: fallbackExplanation(describeAdapterFailure(error)),
       usedFallback: true,
     };
   }
 }
 
+function describeAdapterFailure(error: unknown): string {
+  if (error instanceof ExplanationAdapterError) {
+    switch (error.kind) {
+      case "timeout":
+        return "the explanation request timed out";
+      case "missing_api_key":
+        return "the explanation service is not configured (missing API key)";
+      case "service_error":
+        return "the explanation service returned an error";
+    }
+  }
+  return "The explanation service is unavailable.";
+}
+
 // Mock adapter standing in for a future LLM call. Deterministic, offline, no
 // secrets. It only describes the checker's verdict; it never computes one.
+// Callers may inject any ExplanationAdapter (e.g. failingAdapter) in tests.
 function mockAdapter(input: ExplanationInput): string {
   const slot = `${minutesToTime(input.startMinutes)}–${minutesToTime(input.endMinutes)}`;
 
