@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, CalendarCheck, CircleCheck as CheckCircle2, Clock, Lock, Search, Users, Circle as XCircle } from "lucide-react";
+import { Building2, CalendarCheck, CircleCheck as CheckCircle2, Clock, Lock, Search, Sparkles, Users, Circle as XCircle } from "lucide-react";
 import { rooms } from "./data";
 import { filterRooms } from "./utils/filters";
 import type { CheckResult, Room } from "./types";
@@ -8,6 +8,10 @@ import {
   checkAvailability,
   validateTimeInterval,
 } from "./utils/availability";
+import {
+  buildExplanationInput,
+  generateExplanation,
+} from "./utils/explain";
 import TimeBar from "./components/TimeBar";
 
 function defaultNow(): string {
@@ -23,6 +27,10 @@ export default function App() {
   const [endTime, setEndTime] = useState("11:30");
   const [nowTime, setNowTime] = useState(defaultNow());
   const [result, setResult] = useState<CheckResult | null>(null);
+  const [explanation, setExplanation] = useState<
+    | { text: string; usedFallback: boolean; forStatus: "available" | "unavailable" }
+    | null
+  >(null);
   const [minCapacity, setMinCapacity] = useState(0);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
 
@@ -50,6 +58,7 @@ useEffect(() => {
   );
 
   setResult(null);
+  setExplanation(null);
 }
   const startMin = timeToMinutes(startTime);
   const endMin = timeToMinutes(endTime);
@@ -74,6 +83,25 @@ useEffect(() => {
     setResult(
       checkAvailability(selectedRoom ?? null, startMin, endMin, nowMin)
     );
+    setExplanation(null);
+  }
+
+  function handleExplain() {
+    if (!result) {
+      return;
+    }
+    const input = buildExplanationInput(
+      selectedRoom ?? null,
+      result,
+      startMin,
+      endMin
+    );
+    const output = generateExplanation(input);
+    setExplanation({
+      text: output.text,
+      usedFallback: output.usedFallback,
+      forStatus: result.status,
+    });
   }
 
   return (
@@ -119,6 +147,7 @@ useEffect(() => {
     onChange={(e) => {
       setMinCapacity(Math.max(0, Number(e.target.value) || 0));
       setResult(null);
+      setExplanation(null);
     }}
     className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
   />
@@ -166,6 +195,7 @@ useEffect(() => {
                     onClick={() => {
                       setSelectedId(room.id);
                       setResult(null);
+                      setExplanation(null);
                     }}
                     className={`text-left p-3 rounded-xl border transition-all ${
                       room.blocked
@@ -216,6 +246,7 @@ useEffect(() => {
                   onChange={(e) => {
                     setNowTime(e.target.value);
                     setResult(null);
+                    setExplanation(null);
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -228,6 +259,7 @@ useEffect(() => {
                   onChange={(e) => {
                     setStartTime(e.target.value);
                     setResult(null);
+                    setExplanation(null);
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -240,6 +272,7 @@ useEffect(() => {
                   onChange={(e) => {
                     setEndTime(e.target.value);
                     setResult(null);
+                    setExplanation(null);
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -268,6 +301,16 @@ useEffect(() => {
               <Search size={16} />
               Check Availability
             </button>
+
+            {result && (
+              <button
+                onClick={handleExplain}
+                className="mt-2.5 w-full flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-medium px-4 py-2.5 hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100 transition-colors"
+              >
+                <Sparkles size={16} className="text-blue-600" />
+                Explain availability
+              </button>
+            )}
           </section>
 
           {/* Right: Result + Timeline */}
@@ -323,6 +366,31 @@ useEffect(() => {
                     <span className="font-medium">Check Availability</span>.
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* AI-generated explanation — clearly separate from the confirmed status */}
+            {explanation && (
+              <div
+                aria-live="polite"
+                className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4"
+              >
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1.5">
+                  <Sparkles size={12} />
+                  AI-generated explanation
+                  {explanation.usedFallback && (
+                    <span className="ml-auto normal-case tracking-normal font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                      Fallback used
+                    </span>
+                  )}
+                </p>
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  {explanation.text}
+                </p>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  This text is generated for readability only. It does not decide or
+                  modify availability — the confirmed status above is authoritative.
+                </p>
               </div>
             )}
 

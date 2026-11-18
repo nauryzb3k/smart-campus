@@ -244,3 +244,190 @@ The decision is **conditional** rather than unconditional GO due to the followin
 3. **Background agent limitations:** The independent review was static source inspection only and did not execute tests at runtime. Local command output (section 7.4) provides the empirical confirmation, but the agent's verdicts alone are not sufficient.
 
 None of these limitations affect the correctness of the R-05 and R-08 remediations or the existing application behavior. The project is ready for release with the understanding that the two non-fatal warnings are informational and do not impair functionality.
+
+---
+
+# 8. Practice #11 — AI-Assisted Room Availability Explanation
+
+## 8.1. Objective
+
+The objective of this practice was to implement an AI-assisted explanation feature for the Smart Campus Room Availability Checker.
+
+The feature provides students with a short, understandable explanation of a room's availability status.
+
+The main requirement was to keep the existing deterministic availability checker as the only source of truth. The AI component is responsible only for explaining the checker's result. It must not make booking decisions or change availability status.
+
+### User Story
+
+As a student, I want to receive a short explanation of room availability so that I can understand the booking decision.
+
+## 8.2. Explanation Contract
+
+The explanation component receives the following information:
+
+**Input:**
+- Room label.
+- Requested start time.
+- Requested end time.
+- Availability status (`isAvailable`).
+- Reason code (`reasonCode`).
+
+**Output:**
+- A short explanation as a string.
+- Maximum length: two sentences.
+- The explanation must accurately reflect the availability checker's result.
+
+**Main constraints:**
+- The explanation must not invent booking details.
+- Invalid or incomplete input must be rejected.
+- Empty or contradictory explanations must not be displayed.
+- If the explanation adapter fails, a safe fallback message must be returned.
+- The explanation must never override the deterministic availability result.
+
+## 8.3. Processing Flow
+
+The implemented workflow follows this sequence:
+
+1. The student provides room and time information.
+2. The application validates the input.
+3. The deterministic `checkAvailability()` function checks the requested time interval.
+4. The checker returns `isAvailable` and `reasonCode`.
+5. The explanation adapter generates a description based on the checker result.
+6. The application validates the generated explanation.
+7. The UI displays the explanation separately from the confirmed availability status.
+
+The `checkAvailability()` function remains the single source of truth.
+
+## 8.4. Prompt Comparison
+
+Three prompt approaches were compared:
+
+| Prompt | Description | Evaluation |
+|---|---|---|
+| Prompt A — Minimal | Provides a basic request to explain availability | Too little context and insufficient restrictions |
+| Prompt B — Context-Grounded | Includes room information and the availability result | Better accuracy and context |
+| Prompt C — Strict Explanation-Only | Defines the input context, output restrictions, source of truth, and fallback behavior | Best overall approach |
+
+**Selected approach: Prompt C.**
+
+It provides the strongest protection against invented details and prevents the explanation component from making independent booking decisions.
+
+This was a design-level comparison. No live external AI API was used.
+
+## 8.5. Implementation
+
+The feature was implemented in the existing Smart Campus project.
+
+Files changed or added:
+- `src/App.tsx` — integrated the explanation feature into the application UI.
+- `src/types.ts` — added explanation-related types and reason codes.
+- `src/utils/explain.ts` — implemented input validation, result classification, explanation generation, output validation, and fallback handling.
+- `src/utils/explain.test.ts` — added automated tests for the explanation functionality.
+
+A mock adapter was used instead of a real external AI service.
+
+This keeps the prototype deterministic and avoids external API calls, API keys, and network dependencies.
+
+The implementation also includes:
+- Input validation.
+- Maximum room-label length validation.
+- Availability and reason-code consistency checks.
+- Explanation length and sentence-count validation.
+- Detection of contradictory explanations.
+- Safe fallback responses for adapter failures.
+
+## 8.6. Automated Testing
+
+The new explanation module contains 29 tests.
+
+The complete project test suite contains 60 tests across 5 test files.
+
+| Test case | Expected result | Actual result |
+|---|---|---|
+| Available room | Explanation confirms availability | PASS |
+| Booking overlap | Explanation describes the conflict | PASS |
+| Blocked room | Explanation reports unavailable status without invented details | PASS |
+| Invalid time interval | Invalid input is rejected | PASS |
+| Past start time | Past-time reason is correctly classified | PASS |
+| Empty room label | Input is rejected | PASS |
+| Room label over 100 characters | Input is rejected | PASS |
+| Adapter timeout | Safe fallback is returned | PASS |
+| API error | Safe fallback is returned | PASS |
+| Missing API key | Safe fallback is returned | PASS |
+| Contradictory adapter output | Invalid explanation is rejected | PASS |
+
+### Test Results
+
+- Test files: 5 passed.
+- Total tests: 60 passed.
+- Failed tests: 0.
+
+## 8.7. Agentic Review
+
+A read-only agentic review was performed using Bolt.
+
+The review identified the following findings:
+
+| Finding | Severity | Action |
+|---|---|---|
+| Blocked-room explanation included unsupported details about maintenance or other restrictions | Low | Fixed with neutral wording |
+| Explanation contained a hardcoded duration limit | Low | Removed the hardcoded value |
+| Output contradiction validation was insufficient | Low | Strengthened validation |
+| Unused explanation status guard and missing README documentation | Low | Recorded as a low-priority improvement |
+
+During subsequent local source verification, an additional issue was found in `classifyResult`: the generic current-time condition could match before the more specific past-time condition.
+
+The condition order was corrected and a regression test was added.
+
+The review was read-only. Changes were applied manually after evaluating the findings.
+
+## 8.8. Verification Evidence
+
+The implementation was verified using the following commands:
+
+**Automated tests:**
+`npm.cmd test`
+
+Result: 60 tests passed across 5 test files.
+
+**TypeScript verification:**
+`npm.cmd run typecheck`
+
+Result: completed successfully with no TypeScript errors.
+
+**Production build:**
+`npm.cmd run build`
+
+Result: production build completed successfully. Vite transformed 1574 modules.
+
+A non-blocking Browserslist warning indicated that the local `caniuse-lite` database was outdated. It did not prevent the build from completing.
+
+Screenshots and other practice evidence are stored in the `prac11-evidence/` directory.
+
+## 8.9. Reflection
+
+This practice demonstrated how an AI-assisted feature can be integrated into an existing application without allowing AI to control critical business logic.
+
+The most important design decision was keeping the deterministic availability checker as the single source of truth.
+
+The mock adapter made it possible to test explanation behavior and failure handling without relying on an external service.
+
+The practice also demonstrated the importance of input validation, output validation, automated testing, and agentic code review.
+
+## 8.10. Release Readiness
+
+The Practice #11 prototype is ready for submission.
+
+Completed:
+- Explanation contract and processing flow.
+- Comparison of three prompt approaches.
+- Explanation feature implementation.
+- Mock adapter and fallback handling.
+- Automated tests.
+- Read-only agentic review.
+- Review findings evaluation and code improvements.
+- TypeScript verification.
+- Production build verification.
+- Evidence screenshots.
+
+The prototype does not use a real external AI API. The explanation component remains separate from the deterministic availability checker and does not make booking decisions.
